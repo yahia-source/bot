@@ -11,38 +11,39 @@ from telegram.ext import (
     filters
 )
 
-# ================== الإعدادات (من Render Environment Variables) ==================
+# ================== الإعدادات ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GROUP_ID = int(os.getenv("GROUP_ID"))
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 SUPER_ADMIN = int(os.getenv("SUPER_ADMIN"))
 
 # ================== قاعدة البيانات ==================
-conn = sqlite3.connect("bot.db")
-c = conn.cursor()
+def init_db():
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
+    c = conn.cursor()
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    used_link INTEGER DEFAULT 0
-)
-""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        used_link INTEGER DEFAULT 0
+    )
+    """)
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS admins (
-    user_id INTEGER PRIMARY KEY
-)
-""")
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS admins (
+        user_id INTEGER PRIMARY KEY
+    )
+    """)
 
-# إضافة السوبر أدمن تلقائياً
-c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (SUPER_ADMIN,))
-conn.commit()
-conn.close()
+    # إضافة السوبر أدمن تلقائياً
+    c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (SUPER_ADMIN,))
+    conn.commit()
+    conn.close()
 
 # ================== دوال مساعدة ==================
 
 def is_admin(user_id):
-    conn = sqlite3.connect("bot.db")
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT user_id FROM admins WHERE user_id=?", (user_id,))
     r = c.fetchone()
@@ -50,7 +51,7 @@ def is_admin(user_id):
     return r is not None
 
 def user_used(user_id):
-    conn = sqlite3.connect("bot.db")
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT used_link FROM users WHERE user_id=?", (user_id,))
     r = c.fetchone()
@@ -58,14 +59,14 @@ def user_used(user_id):
     return r and r[0] == 1
 
 def mark_used(user_id):
-    conn = sqlite3.connect("bot.db")
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("UPDATE users SET used_link=1 WHERE user_id=?", (user_id,))
     conn.commit()
     conn.close()
 
 def get_stats():
-    conn = sqlite3.connect("bot.db")
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM users")
     total = c.fetchone()[0]
@@ -79,7 +80,7 @@ def get_stats():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    conn = sqlite3.connect("bot.db")
+    conn = sqlite3.connect("bot.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
     conn.commit()
@@ -207,7 +208,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        conn = sqlite3.connect("bot.db")
+        conn = sqlite3.connect("bot.db", check_same_thread=False)
         c = conn.cursor()
         c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (new_admin_id,))
         conn.commit()
@@ -222,7 +223,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # بث جماعي
     if context.user_data.get("broadcast"):
-        conn = sqlite3.connect("bot.db")
+        conn = sqlite3.connect("bot.db", check_same_thread=False)
         c = conn.cursor()
         c.execute("SELECT user_id FROM users")
         users = c.fetchall()
@@ -244,12 +245,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================== التشغيل ==================
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+def main():
+    # تهيئة قاعدة البيانات
+    init_db()
+    
+    # بناء التطبيق
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("link", link))
-app.add_handler(CommandHandler("admin", admin_panel))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    # إضافة handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("link", link))
+    app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-app.run_polling()
+    print("🤖 البوت يعمل...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
